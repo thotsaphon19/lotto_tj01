@@ -8,7 +8,7 @@
 'use strict';
 
 /* ── CONFIG ── */
-const API_BASE = window.location.origin;
+const API_BASE = 'https://lottotj01-production.up.railway.app';
 const PROXY_FALLBACK = 'https://api.allorigins.win/get?url=';
 
 /* ── STATE ── */
