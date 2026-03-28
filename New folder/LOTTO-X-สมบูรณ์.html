@@ -1,0 +1,1474 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stock lottery Analyze · วิเคราะห์หวยหุ้น ตรวจจับเลขเบิ้ล + พยากรณ์งวดถัดไป</title>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Dots&family=Noto+Sans+Thai:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+/* ══════════════════════════════════════════════════
+   DESIGN TOKENS
+══════════════════════════════════════════════════ */
+:root {
+  --bg:       #03050d;
+  --deep:     #07091a;
+  --panel:    #0b1025;
+  --card:     #0e152e;
+  --raised:   #111a38;
+  --border:   #182440;
+  --dim:      #1d2e52;
+  --ghost:    #263656;
+  --muted:    #566a94;
+
+  --gold:     #ffd040;
+  --amber:    #f5b400;
+  --ember:    #ff6800;
+  --red:      #ff1f40;
+  --green:    #00e0a0;
+  --ice:      #00c4ff;
+  --violet:   #8b5cf6;
+
+  --text:     #d4dff5;
+  --sub:      #8090b8;
+
+  --dbl:      #f5b400;
+  --hot:      #ff6800;
+  --fire:     #ff1f40;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Noto Sans Thai', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* CRT scanlines */
+body::after {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,.10) 3px, rgba(0,0,0,.10) 4px);
+  pointer-events: none; z-index: 9990;
+}
+/* ambient bg glow */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background:
+    radial-gradient(ellipse 80% 50% at 0% 0%, rgba(245,180,0,.07) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 60% at 100% 100%, rgba(0,196,255,.05) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 40% at 50% 50%, rgba(139,92,246,.03) 0%, transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+
+.page {
+  position: relative; z-index: 1;
+  max-width: 1160px; margin: 0 auto;
+  padding: 0 16px 80px;
+}
+
+/* ══════════════════════════════════════════════════
+   TOPBAR
+══════════════════════════════════════════════════ */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 0 14px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-gem {
+  width: 40px; height: 40px; border-radius: 10px;
+  background: conic-gradient(var(--amber) 0 90deg, var(--ember) 90deg 180deg, var(--red) 180deg 270deg, var(--amber) 270deg 360deg);
+  display: flex; align-items: center; justify-content: center; font-size: 19px;
+  box-shadow: 0 0 24px rgba(245,180,0,.35);
+  animation: gemSpin 16s linear infinite; flex-shrink: 0;
+}
+@keyframes gemSpin { to { rotate: 360deg; } }
+.brand-name {
+  font-family: 'Zen Dots'; font-size: 23px; letter-spacing: 2px;
+  background: linear-gradient(90deg, var(--gold), var(--amber), var(--ember));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+.brand-tagline { font-size: 9px; color: var(--muted); letter-spacing: 3px; text-transform: uppercase; margin-top: -1px; }
+
+.topbar-r { display: flex; align-items: center; gap: 8px; }
+.pill {
+  display: flex; align-items: center; gap: 5px;
+  background: var(--raised); border: 1px solid var(--border);
+  border-radius: 20px; padding: 4px 12px; font-size: 11px; color: var(--muted);
+}
+.dot-live {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--green); box-shadow: 0 0 8px var(--green);
+  animation: blinkDot 2s ease infinite;
+}
+@keyframes blinkDot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.3; transform:scale(.75); } }
+.clk {
+  font-family: 'Share Tech Mono'; font-size: 13px; color: var(--amber);
+  letter-spacing: 2px; background: var(--raised); border: 1px solid var(--border);
+  border-radius: 7px; padding: 5px 11px;
+}
+
+/* ══════════════════════════════════════════════════
+   TICKER
+══════════════════════════════════════════════════ */
+.ticker {
+  display: flex; height: 34px;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 9px; overflow: hidden; margin-bottom: 18px;
+}
+.ticker-tag {
+  background: linear-gradient(135deg, var(--amber), var(--ember));
+  color: #000; font-family: 'Zen Dots'; font-size: 9px; letter-spacing: 2px;
+  padding: 0 13px; display: flex; align-items: center; flex-shrink: 0;
+}
+.ticker-body { flex: 1; overflow: hidden; display: flex; align-items: center; }
+.ticker-scroll {
+  display: flex; gap: 28px; white-space: nowrap; padding: 0 14px;
+  animation: tkroll 34s linear infinite;
+}
+@keyframes tkroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.tk { font-family: 'Share Tech Mono'; font-size: 11px; color: var(--muted); }
+.tk b { color: var(--text); margin-right: 3px; }
+.tk.u { color: var(--green); }
+.tk.d { color: var(--red); }
+
+/* ══════════════════════════════════════════════════
+   SOURCE TABS
+══════════════════════════════════════════════════ */
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.tab {
+  padding: 6px 14px; border-radius: 8px;
+  background: var(--raised); border: 1px solid var(--border);
+  font-size: 12px; color: var(--muted); cursor: pointer;
+  transition: all .14s; user-select: none;
+}
+.tab:hover { border-color: var(--amber); color: var(--amber); }
+.tab.on { background: rgba(245,180,0,.1); border-color: var(--amber); color: var(--gold); font-weight: 600; }
+
+/* ══════════════════════════════════════════════════
+   COMMAND BAR
+══════════════════════════════════════════════════ */
+.cmdbar {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 13px; padding: 18px 20px; margin-bottom: 16px;
+  display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;
+  position: relative; overflow: hidden;
+}
+.cmdbar::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--amber) 40%, var(--ember) 60%, transparent);
+  opacity: .6;
+}
+.field { display: flex; flex-direction: column; gap: 5px; }
+.flbl { font-size: 10px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; }
+
+select, .inp {
+  background: var(--raised); border: 1px solid var(--dim);
+  color: var(--text); border-radius: 8px;
+  padding: 9px 13px; font-family: 'Noto Sans Thai'; font-size: 13px;
+  outline: none; transition: border-color .2s, box-shadow .2s;
+}
+select:focus, .inp:focus {
+  border-color: var(--amber);
+  box-shadow: 0 0 0 3px rgba(245,180,0,.1);
+}
+select {
+  min-width: 165px; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23566a94' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px;
+}
+.inp-url { font-family: 'Share Tech Mono'; font-size: 11px; width: 270px; }
+.inp-num {
+  font-family: 'Zen Dots'; font-size: 26px; letter-spacing: 5px;
+  width: 90px; text-align: center; color: var(--gold);
+  padding: 7px 10px;
+}
+.inp-num::placeholder { color: var(--ghost); font-size: 18px; }
+
+.btn {
+  border: none; border-radius: 8px;
+  font-family: 'Noto Sans Thai'; font-size: 13px; font-weight: 600;
+  padding: 9px 18px; cursor: pointer; transition: all .14s;
+  white-space: nowrap; letter-spacing: .3px;
+}
+.btn-primary {
+  background: linear-gradient(135deg, var(--amber), var(--ember));
+  color: #000; box-shadow: 0 0 16px rgba(245,180,0,.25);
+}
+.btn-primary:hover { filter: brightness(1.12); transform: translateY(-1px); }
+.btn-primary:active { transform: translateY(0); }
+.btn-primary:disabled { opacity: .45; cursor: not-allowed; transform: none; filter: none; }
+.btn-ghost { background: transparent; border: 1px solid var(--dim); color: var(--muted); }
+.btn-ghost:hover { border-color: var(--ice); color: var(--ice); }
+.btn-violet { background: rgba(139,92,246,.15); border: 1px solid rgba(139,92,246,.4); color: var(--violet); }
+.btn-violet:hover { background: rgba(139,92,246,.28); }
+.btn-danger { background: rgba(255,31,64,.1); border: 1px solid rgba(255,31,64,.3); color: var(--red); }
+.btn-danger:hover { background: rgba(255,31,64,.2); }
+.btn-sm { padding: 6px 13px; font-size: 11px; }
+
+/* ══════════════════════════════════════════════════
+   STATUS + CHIPS + ALERTS
+══════════════════════════════════════════════════ */
+.statusbar {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--raised); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 14px;
+  font-size: 12px; color: var(--muted); margin-bottom: 14px;
+}
+.s-icon { font-size: 14px; }
+
+.chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+.chip {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 20px; padding: 5px 13px; font-size: 11px; color: var(--muted);
+}
+.chip strong { color: var(--text); }
+.cdot { width: 7px; height: 7px; border-radius: 50%; }
+
+.alert {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 13px; border-radius: 8px; font-size: 12px;
+  margin-bottom: 10px; animation: alertIn .25s ease;
+}
+@keyframes alertIn { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
+.al-ok  { background: rgba(0,224,160,.07); border: 1px solid rgba(0,224,160,.22); color: var(--green); }
+.al-err { background: rgba(255,31,64,.07); border: 1px solid rgba(255,31,64,.22); color: var(--red); }
+.al-info{ background: rgba(0,196,255,.07); border: 1px solid rgba(0,196,255,.22); color: var(--ice); }
+.al-warn{ background: rgba(245,180,0,.08); border: 1px solid rgba(245,180,0,.28); color: var(--gold); }
+
+/* ══════════════════════════════════════════════════
+   SECTION TITLES
+══════════════════════════════════════════════════ */
+.sec {
+  font-family: 'Zen Dots'; font-size: 11px; letter-spacing: 2px;
+  color: var(--amber); text-transform: uppercase;
+  margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+}
+.sec .badge {
+  margin-left: auto; background: rgba(245,180,0,.12);
+  border: 1px solid rgba(245,180,0,.3); color: var(--amber);
+  font-size: 9px; padding: 2px 9px; border-radius: 10px;
+}
+
+/* ══════════════════════════════════════════════════
+   RESULT CARDS GRID
+══════════════════════════════════════════════════ */
+.res-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(285px, 1fr));
+  gap: 12px; margin-bottom: 20px;
+}
+.rc {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 12px; overflow: hidden; transition: border-color .2s;
+}
+.rc:hover { border-color: rgba(245,180,0,.35); }
+.rc-hd {
+  display: flex; align-items: center; gap: 9px;
+  padding: 12px 14px; border-bottom: 1px solid var(--border);
+  background: linear-gradient(135deg, rgba(245,180,0,.04), transparent);
+}
+.rc-flag { font-size: 20px; }
+.rc-name { font-size: 13px; font-weight: 600; }
+.rc-time { font-family: 'Share Tech Mono'; font-size: 10px; color: var(--muted); margin-top: 1px; }
+.rc-badge {
+  margin-left: auto; font-family: 'Zen Dots'; font-size: 8px;
+  letter-spacing: 1px; padding: 2px 8px; border-radius: 4px;
+}
+.b-live { background: rgba(0,224,160,.12); color: var(--green); border: 1px solid rgba(0,224,160,.28); }
+.b-idle { background: rgba(86,106,148,.1); color: var(--muted); border: 1px solid var(--border); }
+.b-err  { background: rgba(255,31,64,.1); color: var(--red); border: 1px solid rgba(255,31,64,.28); }
+.rc-body { padding: 13px 14px; }
+
+.num-row { display: flex; gap: 7px; flex-wrap: wrap; justify-content: center; margin-bottom: 10px; }
+.nbox {
+  background: var(--raised); border: 1px solid var(--dim);
+  border-radius: 8px; padding: 8px 11px; text-align: center; min-width: 58px;
+}
+.nbox.prime { background: rgba(245,180,0,.1); border-color: rgba(245,180,0,.38); }
+.nbox.double {
+  background: rgba(245,180,0,.18); border-color: var(--amber);
+  animation: dblGlow 1.8s ease infinite;
+}
+@keyframes dblGlow { 0%,100% { box-shadow: 0 0 6px rgba(245,180,0,.2); } 50% { box-shadow: 0 0 18px rgba(245,180,0,.5); } }
+.nv { font-family: 'Zen Dots'; font-size: 22px; letter-spacing: 3px; color: var(--gold); }
+.nl { font-size: 9px; color: var(--muted); letter-spacing: 1px; margin-top: 1px; text-transform: uppercase; }
+
+.mrow { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid rgba(24,36,64,.5); }
+.mrow:last-child { border: none; }
+.mk { font-size: 11px; color: var(--muted); }
+.mv { font-family: 'Share Tech Mono'; font-size: 11px; }
+.mv.up { color: var(--green); } .mv.dn { color: var(--red); }
+
+.idle-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28px; gap: 6px; color: var(--muted); font-size: 12px; }
+.spin { width: 20px; height: 20px; border: 2px solid var(--dim); border-top-color: var(--amber); border-radius: 50%; animation: spinning .75s linear infinite; }
+@keyframes spinning { to { rotate: 360deg; } }
+
+/* ══════════════════════════════════════════════════
+   STAT KPIs
+══════════════════════════════════════════════════ */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px; margin-bottom: 18px;
+}
+.kpi {
+  background: var(--raised); border: 1px solid var(--border);
+  border-radius: 10px; padding: 13px; text-align: center;
+}
+.kpi-val { font-family: 'Zen Dots'; font-size: 22px; }
+.kpi-lbl { font-size: 9px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; margin-top: 4px; }
+
+/* ══════════════════════════════════════════════════
+   DOUBLE DETECTION PANEL
+══════════════════════════════════════════════════ */
+.dbl-panel {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 13px; overflow: hidden; margin-bottom: 18px;
+  position: relative;
+}
+.dbl-panel::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--amber), var(--ember), var(--amber), transparent);
+}
+.panel-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 16px 20px 13px; border-bottom: 1px solid var(--border);
+}
+.ph-icon {
+  width: 36px; height: 36px; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center; font-size: 18px;
+  flex-shrink: 0;
+}
+.ph-icon.amber { background: linear-gradient(135deg, var(--amber), var(--ember)); box-shadow: 0 0 14px rgba(245,180,0,.3); }
+.ph-icon.violet { background: linear-gradient(135deg, var(--violet), var(--ice)); box-shadow: 0 0 14px rgba(139,92,246,.3); }
+.ph-title { font-family: 'Zen Dots'; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; }
+.ph-title.amber { color: var(--amber); }
+.ph-title.violet { color: var(--ice); }
+.ph-sub { font-size: 10px; color: var(--muted); margin-top: 2px; }
+.panel-body { padding: 18px 20px; }
+
+/* Heatmap */
+.heatmap {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 4px; margin-bottom: 16px;
+}
+.hc {
+  aspect-ratio: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  border-radius: 7px; border: 1px solid transparent;
+  font-family: 'Zen Dots'; font-size: 10px;
+  cursor: default; transition: transform .12s;
+  position: relative; overflow: hidden;
+}
+.hc:hover { transform: scale(1.15); z-index: 5; }
+.hc .hcc { font-size: 7px; opacity: .65; margin-top: 1px; font-family: 'Share Tech Mono'; }
+
+.lv0 { background: var(--raised); border-color: var(--dim); color: var(--ghost); }
+.lv1 { background: rgba(0,196,255,.07); border-color: rgba(0,196,255,.22); color: rgba(0,196,255,.8); }
+.lv2 { background: rgba(139,92,246,.09); border-color: rgba(139,92,246,.28); color: var(--violet); }
+.lv3 { background: rgba(245,180,0,.1); border-color: rgba(245,180,0,.3); color: var(--amber); }
+.lv4 { background: rgba(255,104,0,.14); border-color: rgba(255,104,0,.48); color: var(--ember); animation: heatPulse 1.8s ease infinite; }
+.lv5 { background: rgba(255,31,64,.16); border-color: rgba(255,31,64,.55); color: var(--fire); animation: heatPulse .9s ease infinite; }
+@keyframes heatPulse { 0%,100% { box-shadow: 0 0 7px currentColor; } 50% { box-shadow: 0 0 18px currentColor; } }
+.lv4::after, .lv5::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(135deg, transparent 30%, rgba(255,255,255,.07) 50%, transparent 70%);
+  animation: shimmer 2.5s ease infinite;
+}
+@keyframes shimmer { from { transform: translateX(-120%); } to { transform: translateX(120%); } }
+
+/* Double list */
+.dbl-list { display: flex; flex-direction: column; gap: 9px; }
+.dbl-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 13px; background: var(--raised);
+  border: 1px solid var(--border); border-radius: 9px; transition: border-color .2s;
+}
+.dbl-row:hover { border-color: rgba(245,180,0,.4); }
+.dbl-num { font-family: 'Zen Dots'; font-size: 22px; letter-spacing: 4px; min-width: 58px; text-align: center; }
+.dbl-info { flex: 1; display: flex; flex-direction: column; gap: 5px; }
+.dbl-meta { display: flex; justify-content: space-between; align-items: center; }
+.dbl-lbl { font-size: 11px; color: var(--muted); }
+.dbl-tag {
+  font-family: 'Zen Dots'; font-size: 9px; letter-spacing: 1px;
+  padding: 2px 8px; border-radius: 4px;
+}
+.t-dbl  { background: rgba(245,180,0,.15); color: var(--amber); }
+.t-hot  { background: rgba(255,104,0,.15); color: var(--ember); }
+.t-fire { background: rgba(255,31,64,.15); color: var(--fire); }
+.t-new  { background: rgba(86,106,148,.12); color: var(--muted); }
+.bar-t { height: 4px; background: var(--dim); border-radius: 2px; overflow: hidden; }
+.bar-f { height: 100%; border-radius: 2px; transition: width .7s cubic-bezier(.4,0,.2,1); }
+.mkt-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+.mkt-tag { font-size: 9px; background: var(--dim); border-radius: 3px; padding: 1px 6px; color: var(--muted); }
+
+/* Pattern grid */
+.pat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 10px;
+}
+.pat {
+  background: var(--raised); border: 1px solid var(--border);
+  border-radius: 9px; padding: 13px; text-align: center;
+  transition: border-color .2s;
+}
+.pat:hover { border-color: rgba(245,180,0,.35); }
+.pat-icon { font-size: 22px; margin-bottom: 6px; }
+.pat-title { font-size: 10px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 9px; }
+.pat-nums { display: flex; gap: 5px; justify-content: center; flex-wrap: wrap; }
+.pn {
+  font-family: 'Zen Dots'; font-size: 14px; letter-spacing: 2px;
+  padding: 4px 9px; border-radius: 6px; border: 1px solid var(--dim);
+  background: var(--card); color: var(--text);
+}
+.pn.a { background: rgba(245,180,0,.12); border-color: rgba(245,180,0,.38); color: var(--gold); }
+.pn.b { background: rgba(139,92,246,.1); border-color: rgba(139,92,246,.32); color: var(--violet); }
+.pn.c { background: rgba(0,196,255,.09); border-color: rgba(0,196,255,.28); color: var(--ice); }
+.pn.d { background: rgba(0,224,160,.08); border-color: rgba(0,224,160,.24); color: var(--green); }
+.pn.e { background: rgba(255,31,64,.1); border-color: rgba(255,31,64,.3); color: var(--fire); }
+
+/* Legend */
+.legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+.lg { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--muted); }
+.lg-dot { width: 12px; height: 12px; border-radius: 3px; }
+.divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+/* ══════════════════════════════════════════════════
+   PREDICTION PANEL
+══════════════════════════════════════════════════ */
+.pred-panel {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 13px; overflow: hidden; margin-bottom: 18px;
+  position: relative;
+}
+.pred-panel::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--violet), var(--ice), var(--violet), transparent);
+}
+
+/* Confidence ring */
+.conf-wrap { display: flex; align-items: center; gap: 18px; margin-bottom: 18px; }
+.ring-svg { transform: rotate(-90deg); }
+.conf-info .conf-label { font-size: 10px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 4px; }
+.conf-info .conf-val { font-family: 'Zen Dots'; font-size: 26px; color: var(--ice); }
+.conf-info .conf-desc { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.7; }
+
+/* Prediction numbers */
+.pred-section { margin-bottom: 16px; }
+.pred-lbl { font-size: 10px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 9px; }
+.pred-nums { display: flex; gap: 9px; flex-wrap: wrap; }
+.pred-n {
+  font-family: 'Zen Dots'; font-size: 28px; letter-spacing: 4px;
+  padding: 11px 17px; border-radius: 9px; border: 1px solid; text-align: center;
+  position: relative; overflow: hidden;
+  animation: numIn .4s ease both;
+}
+@keyframes numIn { from { opacity:0; transform:scale(.8) translateY(8px); } to { opacity:1; transform:none; } }
+.pred-n::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(135deg, transparent 30%, rgba(255,255,255,.06) 50%, transparent 70%);
+  animation: shimmer 3s ease infinite;
+}
+.pn-gold  { background: rgba(245,180,0,.12); border-color: rgba(245,180,0,.42); color: var(--gold); }
+.pn-ember { background: rgba(255,104,0,.12); border-color: rgba(255,104,0,.42); color: var(--ember); }
+.pn-ice   { background: rgba(0,196,255,.09); border-color: rgba(0,196,255,.34); color: var(--ice); }
+.pred-n-lbl { font-family: 'Noto Sans Thai'; font-size: 9px; color: inherit; opacity: .6; display: block; margin-top: 4px; letter-spacing: .5px; }
+
+/* Method bars */
+.method-list { display: flex; flex-direction: column; gap: 9px; }
+.method-row { display: flex; align-items: center; gap: 10px; }
+.m-icon { font-size: 14px; width: 22px; text-align: center; }
+.m-name { font-size: 11px; color: var(--muted); width: 110px; flex-shrink: 0; }
+.m-bar { flex: 1; height: 5px; background: var(--dim); border-radius: 3px; overflow: hidden; }
+.m-fill { height: 100%; border-radius: 3px; transition: width .8s cubic-bezier(.4,0,.2,1); }
+.m-score { font-family: 'Share Tech Mono'; font-size: 11px; width: 32px; text-align: right; }
+
+/* AI analysis stream */
+.ai-stream {
+  font-size: 13px; line-height: 1.9; color: var(--text);
+  min-height: 56px; white-space: pre-wrap;
+  background: var(--raised); border: 1px solid var(--border);
+  border-radius: 9px; padding: 14px 16px;
+}
+.ai-stream.pending { color: var(--muted); font-style: italic; }
+.cursor {
+  display: inline-block; width: 2px; height: 14px;
+  background: var(--ice); margin-left: 3px;
+  animation: cur 1s steps(1) infinite; vertical-align: middle;
+}
+@keyframes cur { 0%,100% { opacity:1; } 50% { opacity:0; } }
+
+/* ══════════════════════════════════════════════════
+   HISTORY TABLE
+══════════════════════════════════════════════════ */
+.hist-wrap {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 13px; overflow: hidden; margin-bottom: 18px;
+}
+.htbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+.htbl th {
+  font-family: 'Zen Dots'; font-size: 9px; letter-spacing: 2px;
+  color: var(--ghost); padding: 10px 13px; text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.htbl td { padding: 9px 13px; border-bottom: 1px solid rgba(24,36,64,.45); }
+.htbl tr:last-child td { border-bottom: none; }
+.htbl tr:hover td { background: rgba(245,180,0,.03); }
+.htbl tr.flash td { animation: rowFlash .55s ease; }
+@keyframes rowFlash { 0% { background: rgba(245,180,0,.12); } 100% { background: transparent; } }
+.nb {
+  font-family: 'Zen Dots'; font-size: 14px; letter-spacing: 3px;
+  padding: 3px 10px; border-radius: 6px; display: inline-block; border: 1px solid;
+}
+.nb-top  { background: rgba(245,180,0,.1); border-color: rgba(245,180,0,.32); color: var(--gold); }
+.nb-bot  { background: rgba(0,196,255,.08); border-color: rgba(0,196,255,.26); color: var(--ice); }
+.nb-dbl  { background: rgba(255,104,0,.12); border-color: rgba(255,104,0,.38); color: var(--ember); animation: dblGlow 1.5s ease infinite; }
+
+/* ══════════════════════════════════════════════════
+   RESPONSIVE
+══════════════════════════════════════════════════ */
+@media (max-width: 720px) {
+  .cmdbar { flex-direction: column; }
+  .inp-url { width: 100%; }
+  .pat-grid { grid-template-columns: repeat(2, 1fr); }
+  .heatmap { gap: 3px; }
+  .hc { font-size: 9px; }
+}
+@media (max-width: 460px) {
+  .pat-grid { grid-template-columns: 1fr 1fr; }
+  .hc { font-size: 8px; }
+}
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--dim); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- ── TOPBAR ── -->
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-gem">🎯</div>
+    <div>
+      <div class="brand-name">TECH-TJ</div>
+      <div class="brand-name">Stock Lottery Analyze</div>
+      <div class="brand-tagline">Double Detect · Pattern AI · Next Round : วิเคราะห์หวยหุ้น ตรวจจับเลขเบิ้ล + พยากรณ์งวดถัดไป</div>
+    </div>
+  </div>
+  <div class="topbar-r">
+    <div class="pill"><div class="dot-live"></div>LIVE</div>
+    <div class="clk" id="clk">--:--:--</div>
+  </div>
+</div>
+
+<!-- ── TICKER ── -->
+<div class="ticker">
+  <div class="ticker-tag">MARKET</div>
+  <div class="ticker-body">
+    <div class="ticker-scroll">
+      <span class="tk u"><b>SET</b><span id="t1">---</span></span>
+      <span class="tk"><b>ไทยเช้า</b><span id="t2">---</span></span>
+      <span class="tk"><b>ไทยบ่าย</b><span id="t3">---</span></span>
+      <span class="tk"><b>ไทยเย็น</b><span id="t4">---</span></span>
+      <span class="tk"><b>นิเคอิ</b><span id="t5">---</span></span>
+      <span class="tk"><b>ฮ่องกง</b><span id="t6">---</span></span>
+      <span class="tk"><b>ฮานอย</b><span id="t7">---</span></span>
+      <span class="tk"><b>ลาว</b><span id="t8">---</span></span>
+      <!-- duplicate for seamless loop -->
+      <span class="tk u"><b>SET</b><span>---</span></span>
+      <span class="tk"><b>ไทยเช้า</b><span>---</span></span>
+      <span class="tk"><b>ไทยบ่าย</b><span>---</span></span>
+      <span class="tk"><b>ไทยเย็น</b><span>---</span></span>
+      <span class="tk"><b>นิเคอิ</b><span>---</span></span>
+      <span class="tk"><b>ฮ่องกง</b><span>---</span></span>
+      <span class="tk"><b>ฮานอย</b><span>---</span></span>
+      <span class="tk"><b>ลาว</b><span>---</span></span>
+    </div>
+  </div>
+</div>
+
+<!-- ── SOURCE TABS ── -->
+<div class="tabs">
+  <div class="tab on" data-s="thai"     onclick="setSrc('thai')">🇹🇭 หวยหุ้นไทย</div>
+  <div class="tab"    data-s="nikkei"   onclick="setSrc('nikkei')">🇯🇵 นิเคอิ</div>
+  <div class="tab"    data-s="hangseng" onclick="setSrc('hangseng')">🇭🇰 ฮั่งเส็ง</div>
+  <div class="tab"    data-s="dowjones" onclick="setSrc('dowjones')">🇺🇸 ดาวโจนส์</div>
+  <div class="tab"    data-s="hanoi"    onclick="setSrc('hanoi')">🇻🇳 ฮานอย</div>
+  <div class="tab"    data-s="laos"     onclick="setSrc('laos')">🇱🇦 ลาว</div>
+</div>
+
+<!-- ── COMMAND BAR ── -->
+<div class="cmdbar">
+  <!-- Market selector -->
+  <div class="field">
+    <div class="flbl">ตลาด</div>
+    <select id="mktSel" onchange="setSrc(this.value)">
+      <option value="thai">🇹🇭 หวยหุ้นไทย</option>
+      <option value="nikkei">🇯🇵 นิเคอิ</option>
+      <option value="hangseng">🇭🇰 ฮั่งเส็ง</option>
+      <option value="dowjones">🇺🇸 ดาวโจนส์</option>
+      <option value="hanoi">🇻🇳 ฮานอย</option>
+      <option value="laos">🇱🇦 ลาว</option>
+    </select>
+  </div>
+
+  <!-- Manual number input -->
+  <div class="field">
+    <div class="flbl">กรอกเลข (บน)</div>
+    <input class="inp inp-num" id="manTop" type="text" maxlength="2" placeholder="00"
+      oninput="this.value=this.value.replace(/[^0-9]/g,'')"
+      onkeydown="if(event.key==='Enter')addManual()">
+  </div>
+  <div class="field">
+    <div class="flbl">เลข (ล่าง)</div>
+    <input class="inp inp-num" id="manBot" type="text" maxlength="2" placeholder="00"
+      oninput="this.value=this.value.replace(/[^0-9]/g,'')"
+      onkeydown="if(event.key==='Enter')addManual()">
+  </div>
+  <button class="btn btn-primary" onclick="addManual()" style="margin-top:auto">➕ เพิ่ม</button>
+
+  <!-- URL fetch -->
+  <div class="field">
+    <div class="flbl">URL ดึงข้อมูล</div>
+    <input class="inp inp-url" id="urlIn" type="text" readonly>
+  </div>
+  <button class="btn btn-ghost" id="btnFetch" onclick="doFetch()" style="margin-top:auto">⚡ ดึงเว็บ</button>
+  <button class="btn btn-ghost btn-sm" onclick="doFetchAll()" style="margin-top:auto">🔄 ทุกตลาด</button>
+  <button class="btn btn-ghost btn-sm" onclick="loadDemo()" style="margin-top:auto">📦 Demo</button>
+  <button class="btn btn-danger btn-sm" onclick="clearAll()" style="margin-top:auto">🗑</button>
+</div>
+
+<!-- alerts -->
+<div id="alertBox"></div>
+
+<!-- STATUS BAR -->
+<div class="statusbar">
+  <span class="s-icon" id="sIcon">📡</span>
+  <span id="sTxt">พร้อมใช้งาน — กรอกเลขเองหรือดึงข้อมูลจากเว็บ</span>
+</div>
+
+<!-- CHIPS -->
+<div class="chips">
+  <div class="chip"><div class="cdot" style="background:var(--green)"></div>งวดทั้งหมด <strong id="cAll">0</strong></div>
+  <div class="chip"><div class="cdot" style="background:var(--amber)"></div>เลขเบิ้ล <strong id="cDbl">0</strong> ตัว</div>
+  <div class="chip"><div class="cdot" style="background:var(--ember)"></div>เลขร้อน <strong id="cHot">0</strong> ตัว</div>
+  <div class="chip"><div class="cdot" style="background:var(--red)"></div>เลขไฟ <strong id="cFire">0</strong> ตัว</div>
+  <div class="chip"><div class="cdot" style="background:var(--ice)"></div>อัพเดท <strong id="cTime">—</strong></div>
+</div>
+
+<!-- ── RESULT CARDS ── -->
+<div class="sec">🌐 ผลการดึงข้อมูล <span class="badge" id="rcBadge">0 ตลาด</span></div>
+<div class="res-grid" id="resGrid"></div>
+
+<!-- ── STAT KPIs ── -->
+<div class="kpi-row" id="kpiRow" style="display:none">
+  <div class="kpi"><div class="kpi-val" style="color:var(--amber)" id="kAvg">--</div><div class="kpi-lbl">ค่าเฉลี่ย</div></div>
+  <div class="kpi"><div class="kpi-val" style="color:var(--ice)" id="kMed">--</div><div class="kpi-lbl">มัธยฐาน</div></div>
+  <div class="kpi"><div class="kpi-val" style="color:var(--green)" id="kUniq">--</div><div class="kpi-lbl">ตัวเลขไม่ซ้ำ</div></div>
+  <div class="kpi"><div class="kpi-val" style="color:var(--amber)" id="kDbl">--</div><div class="kpi-lbl">เบิ้ล (2+)</div></div>
+  <div class="kpi"><div class="kpi-val" style="color:var(--ember)" id="kHot">--</div><div class="kpi-lbl">ร้อน (4+)</div></div>
+  <div class="kpi"><div class="kpi-val" style="color:var(--violet)" id="kRange">--</div><div class="kpi-lbl">ช่วงเลข</div></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     DOUBLE DETECTION PANEL
+══════════════════════════════════════════════════ -->
+<div class="dbl-panel">
+  <div class="panel-head">
+    <div class="ph-icon amber">⚡</div>
+    <div>
+      <div class="ph-title amber">ตรวจจับเลขเบิ้ล</div>
+      <div class="ph-sub">Double Number Detection · Heat Map · Pattern Analysis</div>
+    </div>
+    <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="refreshDoubles()">↻ รีเฟรช</button>
+  </div>
+  <div class="panel-body">
+
+    <!-- Heatmap 10x10 -->
+    <div class="sec" style="margin-bottom:8px">🌡️ แผนที่ความร้อน 00–99</div>
+    <div class="heatmap" id="heatmap"></div>
+    <div class="legend">
+      <div class="lg"><div class="lg-dot" style="background:var(--raised);border:1px solid var(--dim)"></div>ไม่ออก</div>
+      <div class="lg"><div class="lg-dot" style="background:rgba(0,196,255,.2)"></div>1 ครั้ง</div>
+      <div class="lg"><div class="lg-dot" style="background:rgba(139,92,246,.22)"></div>2 ครั้ง</div>
+      <div class="lg"><div class="lg-dot" style="background:rgba(245,180,0,.22)"></div>3 ครั้ง</div>
+      <div class="lg"><div class="lg-dot" style="background:rgba(255,104,0,.3)"></div>เบิ้ล 4+</div>
+      <div class="lg"><div class="lg-dot" style="background:rgba(255,31,64,.32)"></div>ร้อน 5+</div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Pattern analysis -->
+    <div class="sec" style="margin-bottom:10px">🔬 วิเคราะห์รูปแบบเลข</div>
+    <div class="pat-grid" id="patGrid">
+      <div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--muted);font-size:12px">ต้องการข้อมูลก่อน</div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Double list -->
+    <div class="sec" style="margin-bottom:10px">📊 รายการเลขเบิ้ล <span class="badge" id="dblBadge">0 ตัว</span></div>
+    <div class="dbl-list" id="dblList">
+      <div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">ยังไม่พบเลขซ้ำ — เพิ่มข้อมูลก่อน</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     NEXT ROUND PREDICTION
+══════════════════════════════════════════════════ -->
+<div class="pred-panel">
+  <div class="panel-head">
+    <div class="ph-icon violet">🔮</div>
+    <div>
+      <div class="ph-title violet">พยากรณ์งวดถัดไป</div>
+      <div class="ph-sub">Next Round Prediction · Statistical + Claude AI</div>
+    </div>
+    <button class="btn btn-violet btn-sm" style="margin-left:auto" onclick="runDeepAI()">🤖 AI วิเคราะห์</button>
+  </div>
+  <div class="panel-body">
+
+    <!-- Confidence ring -->
+    <div class="conf-wrap">
+      <svg class="ring-svg" width="92" height="92" viewBox="0 0 92 92">
+        <circle cx="46" cy="46" r="38" fill="none" stroke="var(--dim)" stroke-width="7"/>
+        <circle id="confArc" cx="46" cy="46" r="38" fill="none"
+          stroke="url(#cgrd)" stroke-width="7" stroke-linecap="round"
+          stroke-dasharray="238.8" stroke-dashoffset="238.8"
+          style="transition:stroke-dashoffset .9s ease"/>
+        <defs>
+          <linearGradient id="cgrd" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#8b5cf6"/>
+            <stop offset="100%" stop-color="#00c4ff"/>
+          </linearGradient>
+        </defs>
+        <text id="confPct" x="46" y="44" text-anchor="middle" dominant-baseline="middle"
+          font-family="Zen Dots" font-size="16" fill="#00c4ff"
+          style="transform:rotate(90deg);transform-origin:46px 46px">--%</text>
+        <text x="46" y="60" text-anchor="middle" dominant-baseline="middle"
+          font-family="Noto Sans Thai" font-size="8" fill="#566a94"
+          style="transform:rotate(90deg);transform-origin:46px 46px">ความมั่นใจ</text>
+      </svg>
+      <div class="conf-info">
+        <div class="conf-label">สถานะการวิเคราะห์</div>
+        <div class="conf-val" id="confStatus">รอข้อมูล</div>
+        <div class="conf-desc" id="confDesc">เพิ่มข้อมูลอย่างน้อย 3 งวด<br>หรือกด "AI วิเคราะห์" เพื่อประมวลผลเชิงลึก</div>
+      </div>
+    </div>
+
+    <!-- Prediction numbers -->
+    <div class="pred-section" id="predSection" style="display:none">
+      <div class="pred-lbl">🎯 เลขเด่นที่คาดว่าจะออกงวดถัดไป</div>
+      <div class="pred-nums" id="predNums"></div>
+    </div>
+
+    <!-- Method scores -->
+    <div class="pred-section" id="methodSection" style="display:none">
+      <div class="pred-lbl">📐 วิธีการวิเคราะห์และคะแนน</div>
+      <div class="method-list" id="methodList"></div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- AI deep analysis -->
+    <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px">
+      <span style="font-size:15px">🤖</span>
+      <span style="font-family:'Zen Dots';font-size:10px;letter-spacing:2px;color:var(--violet)">CLAUDE AI DEEP ANALYSIS</span>
+    </div>
+    <div class="ai-stream pending" id="aiStream">
+กดปุ่ม "🤖 AI วิเคราะห์" เพื่อให้ Claude วิเคราะห์รูปแบบเชิงลึก
+คาดการณ์เลขเด่น + เลขเบิ้ล งวดถัดไป พร้อมเหตุผล</div>
+
+  </div>
+</div>
+
+<!-- ── HISTORY TABLE ── -->
+<div class="hist-wrap">
+  <div style="padding:15px 20px 12px;border-bottom:1px solid var(--border)">
+    <div class="sec" style="margin:0">📋 ประวัติผลหวยทั้งหมด <span class="badge" id="histBadge">0 งวด</span></div>
+  </div>
+  <div style="overflow-x:auto">
+    <table class="htbl">
+      <thead>
+        <tr>
+          <th>ตลาด</th><th>รอบ</th><th>เลขบน</th><th>เลขล่าง</th>
+          <th>เบิ้ล?</th><th>บน(×)</th><th>ล่าง(×)</th><th>เวลา</th>
+        </tr>
+      </thead>
+      <tbody id="histBody">
+        <tr><td colspan="8" style="text-align:center;padding:24px;color:var(--muted)">ยังไม่มีข้อมูล</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+</div><!-- /page -->
+
+<!-- ══════════════════════════════════════════════════
+     JAVASCRIPT — FULL ENGINE
+══════════════════════════════════════════════════ -->
+<script>
+'use strict';
+
+/* ════════════════════════════════════════════════════
+   SOURCES CONFIG
+════════════════════════════════════════════════════ */
+const SRCS = {
+  thai:     { name:'หวยหุ้นไทย',  flag:'🇹🇭', url:'https://xn--y3ccoob3d.com/',      rounds:['เปิดเช้า','ปิดเช้า','เปิดบ่าย','ปิดบ่าย','เปิดเย็น','ปิดเย็น'] },
+  nikkei:   { name:'นิเคอิ',      flag:'🇯🇵', url:'https://xn--y3ccoob3d.com/',      rounds:['เปิด','ปิด'] },
+  hangseng: { name:'ฮั่งเส็ง',   flag:'🇭🇰', url:'https://xn--y3ccoob3d.com/',      rounds:['เปิด','ปิด'] },
+  dowjones: { name:'ดาวโจนส์',   flag:'🇺🇸', url:'https://xn--y3ccoob3d.com/',      rounds:['รอบล่าสุด'] },
+  hanoi:    { name:'ฮานอย',      flag:'🇻🇳', url:'https://xn--y3ccoob3d.com/',      rounds:['รอบ 1','รอบ 2'] },
+  laos:     { name:'ลาว',        flag:'🇱🇦', url:'https://xn--y3ccoob3d.com/',      rounds:['รอบหลัก'] },
+};
+const PROXY = 'https://api.allorigins.win/get?url=';
+
+/* ════════════════════════════════════════════════════
+   STATE
+════════════════════════════════════════════════════ */
+let currentSrc = 'thai';
+let fetched    = {};    // src → parsed result
+let allRounds  = [];    // all entries [{src,name,flag,top,bot,round,time}]
+let freq       = {};    // num → [{src,name,flag,round,time}]
+let histRows   = [];    // for history table
+
+/* ════════════════════════════════════════════════════
+   INIT HEATMAP
+════════════════════════════════════════════════════ */
+function initHeatmap() {
+  const g = document.getElementById('heatmap');
+  g.innerHTML = '';
+  for (let i = 0; i < 100; i++) {
+    const n  = pad(i);
+    const el = document.createElement('div');
+    el.className  = 'hc lv0';
+    el.id         = 'hc_' + n;
+    el.title      = 'เลข ' + n;
+    el.innerHTML  = `${n}<span class="hcc"></span>`;
+    g.appendChild(el);
+  }
+}
+initHeatmap();
+
+/* init empty result cards */
+(function initCards() {
+  const g = document.getElementById('resGrid');
+  Object.keys(SRCS).forEach(src => {
+    const s   = SRCS[src];
+    const div = document.createElement('div');
+    div.className = 'rc';
+    div.id        = 'rc_' + src;
+    div.innerHTML =
+      `<div class="rc-hd">
+        <div class="rc-flag">${s.flag}</div>
+        <div><div class="rc-name">${s.name}</div><div class="rc-time">รอดึงข้อมูล</div></div>
+        <span class="rc-badge b-idle">IDLE</span>
+       </div>
+       <div class="idle-state"><div style="font-size:28px;opacity:.22">📡</div><div>กดดึงข้อมูล</div></div>`;
+    g.appendChild(div);
+  });
+})();
+
+setSrc('thai');
+
+/* ════════════════════════════════════════════════════
+   CLOCK
+════════════════════════════════════════════════════ */
+setInterval(() => {
+  document.getElementById('clk').textContent =
+    new Date().toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+}, 1000);
+
+/* ════════════════════════════════════════════════════
+   SOURCE SWITCHING
+════════════════════════════════════════════════════ */
+function setSrc(src) {
+  currentSrc = src;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.s === src));
+  document.getElementById('mktSel').value = src;
+  document.getElementById('urlIn').value  = SRCS[src].url;
+}
+
+/* ════════════════════════════════════════════════════
+   MANUAL INPUT
+════════════════════════════════════════════════════ */
+function addManual() {
+  const topRaw = document.getElementById('manTop').value.trim();
+  const botRaw = document.getElementById('manBot').value.trim();
+  if (!topRaw && !botRaw) { alert2('⚠️ กรอกเลขบนหรือเลขล่างอย่างน้อย 1 ช่อง', 'al-info'); return; }
+
+  const top = topRaw ? pad(parseInt(topRaw)) : '??';
+  const bot = botRaw ? pad(parseInt(botRaw)) : '??';
+  const src  = currentSrc;
+  const s    = SRCS[src];
+
+  const entry = { src, name:s.name, flag:s.flag, top, bot, round:'กรอกเอง', time:new Date() };
+  ingest(entry);
+  document.getElementById('manTop').value = '';
+  document.getElementById('manBot').value = '';
+  renderAll(true);
+
+  const topF = (freq[top]||[]).length;
+  const botF = (freq[bot]||[]).length;
+  if (topF >= 2) alert2(`⚡ เลขบน ${top} เบิ้ล! ออกซ้ำ ${topF} ครั้ง`, 'al-warn');
+  else if (botF >= 2) alert2(`⚡ เลขล่าง ${bot} เบิ้ล! ออกซ้ำ ${botF} ครั้ง`, 'al-warn');
+  else alert2(`✅ เพิ่มเลข ${top}/${bot} เรียบร้อย`, 'al-ok');
+}
+
+/* ════════════════════════════════════════════════════
+   WEB FETCH (via CORS proxy)
+════════════════════════════════════════════════════ */
+async function doFetch() {
+  const src = currentSrc;
+  const cfg = SRCS[src];
+  setStatus('⏳', `กำลังดึงข้อมูล ${cfg.name}...`);
+  setBusy(true);
+  renderCard(src, 'loading');
+  clearAlert();
+  try {
+    const r = await fetch(PROXY + encodeURIComponent(cfg.url), { signal: AbortSignal.timeout(14000) });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    const parsed = parseHtml(src, j.contents || '');
+    fetched[src] = parsed;
+    renderCard(src, 'ok', parsed);
+    ingest({ src, name:cfg.name, flag:cfg.flag, top:parsed.top, bot:parsed.bot, round:cfg.rounds[0]||'—', time:parsed.time });
+    renderAll(true);
+    setStatus('✅', `ดึง ${cfg.name} สำเร็จ — ${new Date().toLocaleTimeString('th-TH')}`);
+    alert2(`✅ ดึงข้อมูล ${cfg.name} สำเร็จ — พบเลข ${parsed.nums.length} ตัว`, 'al-ok');
+    updateTicker(src, parsed.top, parsed.bot);
+  } catch (e) {
+    fetched[src] = null;
+    renderCard(src, 'err');
+    setStatus('❌', `ผิดพลาด: ${e.message}`);
+    alert2(`❌ ดึงข้อมูล ${cfg.name} ล้มเหลว: ${e.message}`, 'al-err');
+  } finally {
+    setBusy(false);
+    updateChips();
+  }
+}
+
+async function doFetchAll() {
+  for (const src of Object.keys(SRCS)) {
+    setSrc(src);
+    await doFetch();
+    await sleep(800);
+  }
+  setSrc('thai');
+}
+
+/* ════════════════════════════════════════════════════
+   PARSE HTML
+════════════════════════════════════════════════════ */
+function parseHtml(src, html) {
+  const doc  = new DOMParser().parseFromString(html, 'text/html');
+  const text = doc.body?.innerText || html;
+  const seen = new Set(), nums = [];
+  for (const m of text.matchAll(/\b([0-9]{2})\b/g)) {
+    if (!seen.has(m[1]) && nums.length < 30) { seen.add(m[1]); nums.push(m[1]); }
+  }
+  const idxM = text.match(/(\d{3,4}[.,]\d{2})/);
+  return {
+    src, nums,
+    top:  nums[0] || '??',
+    bot:  nums[1] || '??',
+    setIdx: idxM ? idxM[1] : null,
+    rounds: SRCS[src].rounds,
+    time:   new Date(),
+    rawLen: html.length,
+  };
+}
+
+/* ════════════════════════════════════════════════════
+   INGEST — store into freq map + history
+════════════════════════════════════════════════════ */
+function ingest(entry) {
+  allRounds.unshift(entry);
+  histRows.unshift(entry);
+  if (entry.top !== '??') {
+    if (!freq[entry.top]) freq[entry.top] = [];
+    freq[entry.top].push(entry);
+  }
+  if (entry.bot !== '??' && entry.bot !== entry.top) {
+    if (!freq[entry.bot]) freq[entry.bot] = [];
+    freq[entry.bot].push(entry);
+  }
+}
+
+/* ════════════════════════════════════════════════════
+   CLEAR ALL
+════════════════════════════════════════════════════ */
+function clearAll() {
+  if (!allRounds.length && !Object.values(fetched).some(Boolean)) return;
+  if (!confirm('ล้างข้อมูลทั้งหมด?')) return;
+  fetched = {}; allRounds = []; freq = {}; histRows = [];
+  initHeatmap();
+  Object.keys(SRCS).forEach(src => {
+    const s = SRCS[src];
+    document.getElementById('rc_'+src).innerHTML =
+      `<div class="rc-hd"><div class="rc-flag">${s.flag}</div><div><div class="rc-name">${s.name}</div><div class="rc-time">รอดึงข้อมูล</div></div><span class="rc-badge b-idle">IDLE</span></div>
+       <div class="idle-state"><div style="font-size:28px;opacity:.22">📡</div><div>กดดึงข้อมูล</div></div>`;
+  });
+  renderAll(false);
+  alert2('🗑️ ล้างข้อมูลเรียบร้อย', 'al-info');
+  setStatus('📡', 'พร้อมใช้งานใหม่');
+}
+
+/* ════════════════════════════════════════════════════
+   DEMO DATA
+════════════════════════════════════════════════════ */
+function loadDemo() {
+  const demo = [
+    {src:'thai',    top:'15', bot:'72', round:'เปิดเช้า',  d:0},
+    {src:'thai',    top:'28', bot:'15', round:'ปิดเช้า',   d:1},
+    {src:'nikkei',  top:'44', bot:'28', round:'เปิด',      d:2},
+    {src:'hanoi',   top:'15', bot:'33', round:'รอบ 1',     d:3},
+    {src:'hangseng',top:'62', bot:'44', round:'เปิด',      d:4},
+    {src:'thai',    top:'33', bot:'15', round:'เปิดบ่าย',  d:5},
+    {src:'laos',    top:'28', bot:'62', round:'รอบหลัก',   d:6},
+    {src:'dowjones',top:'15', bot:'44', round:'รอบล่าสุด', d:7},
+    {src:'thai',    top:'77', bot:'28', round:'ปิดบ่าย',   d:8},
+    {src:'nikkei',  top:'15', bot:'62', round:'ปิด',       d:9},
+    {src:'thai',    top:'44', bot:'33', round:'เปิดเย็น',  d:10},
+    {src:'hanoi',   top:'28', bot:'15', round:'รอบ 2',     d:11},
+  ];
+  demo.forEach(d => {
+    const s = SRCS[d.src];
+    ingest({ src:d.src, name:s.name, flag:s.flag, top:d.top, bot:d.bot, round:d.round, time:new Date(Date.now()-d.d*600000) });
+    if (!fetched[d.src]) { fetched[d.src]={ top:d.top, bot:d.bot, nums:[d.top,d.bot], rounds:s.rounds, time:new Date(), rawLen:12000 }; renderCard(d.src,'ok',fetched[d.src]); }
+  });
+  renderAll(false);
+  alert2('📦 โหลดตัวอย่าง 12 งวด — เลข 15, 28, 44 คือเลขเบิ้ล ลองกด "🤖 AI วิเคราะห์"', 'al-info');
+  setStatus('✅', 'โหลด Demo 12 งวดเรียบร้อย');
+}
+
+/* ════════════════════════════════════════════════════
+   RENDER CARD
+════════════════════════════════════════════════════ */
+function renderCard(src, state, data) {
+  const card = document.getElementById('rc_' + src);
+  const cfg  = SRCS[src];
+  if (state === 'loading') {
+    card.innerHTML =
+      `<div class="rc-hd"><div class="rc-flag">${cfg.flag}</div><div><div class="rc-name">${cfg.name}</div><div class="rc-time">กำลังโหลด...</div></div><span class="rc-badge b-idle">WAIT</span></div>
+       <div class="idle-state"><div class="spin"></div>ดึงข้อมูล...</div>`;
+    return;
+  }
+  if (state === 'err') {
+    card.innerHTML =
+      `<div class="rc-hd"><div class="rc-flag">${cfg.flag}</div><div><div class="rc-name">${cfg.name}</div><div class="rc-time">ผิดพลาด</div></div><span class="rc-badge b-err">ERR</span></div>
+       <div class="idle-state" style="color:var(--red)">❌ เชื่อมต่อไม่ได้</div>`;
+    return;
+  }
+  const t     = data.time.toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit' });
+  const tFreq = (freq[data.top]||[]).length;
+  const bFreq = (freq[data.bot]||[]).length;
+  const boxes = (data.nums||[]).slice(0,4).map((n,i) => {
+    const f   = (freq[n]||[]).length;
+    const cls = f >= 4 ? 'double' : f >= 2 ? 'prime' : '';
+    return `<div class="nbox ${cls}"><div class="nv">${n}</div><div class="nl">${i===0?'บน':i===1?'ล่าง':f>=2?'⚡เบิ้ล':'#'+(i+1)}</div></div>`;
+  }).join('');
+  const isDbl = tFreq >= 2 || bFreq >= 2;
+  card.innerHTML =
+    `<div class="rc-hd">
+       <div class="rc-flag">${cfg.flag}</div>
+       <div><div class="rc-name">${cfg.name}</div><div class="rc-time">${t} · ${(data.rawLen/1024).toFixed(1)}KB</div></div>
+       <span class="rc-badge b-live">LIVE</span>
+     </div>
+     <div class="rc-body">
+       <div class="num-row">${boxes}</div>
+       ${data.setIdx ? `<div class="mrow"><span class="mk">ดัชนี</span><span class="mv">${data.setIdx}</span></div>` : ''}
+       <div class="mrow"><span class="mk">เลขเบิ้ล?</span><span class="mv ${isDbl?'up':''}">${isDbl ? `⚡ ${tFreq>=2?data.top:data.bot} เบิ้ล (${Math.max(tFreq,bFreq)}×)` : '—'}</span></div>
+       <div class="mrow"><span class="mk">รอบ</span><span class="mv" style="font-size:10px;color:var(--muted)">${cfg.rounds.join(' · ')}</span></div>
+     </div>`;
+}
+
+/* ════════════════════════════════════════════════════
+   RENDER ALL
+════════════════════════════════════════════════════ */
+function renderAll(isNew) {
+  updateHeatmap();
+  renderDoubles();
+  renderPatterns();
+  renderStatKPIs();
+  renderHistory(isNew);
+  calcLocalPred();
+  updateChips();
+  document.getElementById('rcBadge').textContent = Object.values(fetched).filter(Boolean).length + ' ตลาด';
+}
+
+/* ── HEATMAP ── */
+function updateHeatmap() {
+  for (let i = 0; i < 100; i++) {
+    const n  = pad(i);
+    const el = document.getElementById('hc_' + n);
+    if (!el) continue;
+    const c  = (freq[n]||[]).length;
+    const lv = c===0?0 : c===1?1 : c===2?2 : c===3?3 : c===4?4 : 5;
+    el.className = 'hc lv' + lv;
+    el.innerHTML = `${n}<span class="hcc">${c > 0 ? c+'×' : ''}</span>`;
+    el.title     = `เลข ${n}: ออก ${c} ครั้ง${c>=2?' ⚡เบิ้ล':''}`;
+  }
+}
+
+/* ── DOUBLES ── */
+function renderDoubles() {
+  const doubles = Object.entries(freq)
+    .filter(([,a]) => a.length >= 2)
+    .sort((a,b) => b[1].length - a[1].length);
+
+  document.getElementById('dblBadge').textContent = doubles.length + ' ตัว';
+
+  const list = document.getElementById('dblList');
+  if (!doubles.length) {
+    list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">✅ ยังไม่พบเลขซ้ำ</div>';
+    return;
+  }
+
+  const maxC = doubles[0][1].length;
+  list.innerHTML = doubles.map(([n, entries]) => {
+    const c       = entries.length;
+    const pct     = Math.round(c / maxC * 100);
+    const pctAll  = allRounds.length ? Math.round(c / allRounds.length * 100) : 0;
+    const col     = c>=5 ? 'var(--fire)' : c>=4 ? 'var(--ember)' : 'var(--dbl)';
+    const icon    = c>=5 ? '🔥' : c>=4 ? '⚡' : c>=3 ? '↑' : '↩';
+    const tagTxt  = c>=5 ? '🔥 ร้อนแรง' : c>=4 ? '⚡ เบิ้ล+' : c>=3 ? '↑ ออกบ่อย' : '↩ ซ้ำ';
+    const tagCls  = c>=5 ? 't-fire' : c>=4 ? 't-hot' : 't-dbl';
+    const mkts    = [...new Set(entries.map(e => e.flag + e.name.slice(0,3)))];
+    return `<div class="dbl-row">
+      <div class="dbl-num" style="color:${col}">${n}</div>
+      <div class="dbl-info">
+        <div class="dbl-meta">
+          <span class="dbl-lbl">${icon} ออก ${c} ครั้ง</span>
+          <div style="display:flex;align-items:center;gap:7px">
+            <span class="dbl-tag ${tagCls}">${tagTxt}</span>
+            <span style="font-family:'Share Tech Mono';font-size:11px;color:${col}">${pctAll}%</span>
+          </div>
+        </div>
+        <div class="bar-t"><div class="bar-f" style="width:${pct}%;background:${col}"></div></div>
+        <div class="mkt-tags">${mkts.map(m => `<span class="mkt-tag">${m}</span>`).join('')}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ── PATTERNS ── */
+function renderPatterns() {
+  const pg = document.getElementById('patGrid');
+  if (!allRounds.length) {
+    pg.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--muted);font-size:12px">ต้องการข้อมูลก่อน</div>';
+    return;
+  }
+
+  const sortedF  = Object.entries(freq).sort((a,b) => b[1].length - a[1].length);
+  const top3     = sortedF.slice(0,3).map(([n]) => n);
+
+  // pair analysis
+  const pairCnt = {};
+  for (let i = 0; i < allRounds.length - 1; i++) {
+    const p = [allRounds[i].top, allRounds[i+1].top].sort().join('-');
+    pairCnt[p] = (pairCnt[p]||0) + 1;
+  }
+  const topPair = Object.entries(pairCnt).sort((a,b) => b[1]-a[1])[0];
+
+  // digit freq
+  const d0 = Array(10).fill(0), d1 = Array(10).fill(0);
+  allRounds.forEach(e => {
+    if (e.top !== '??') { d0[+e.top[0]]++; d1[+e.top[1]]++; }
+  });
+  const ld = d0.indexOf(Math.max(...d0));
+  const ud = d1.indexOf(Math.max(...d1));
+
+  // mirror pairs
+  const mirrors = [];
+  Object.keys(freq).forEach(n => {
+    const m = n[1]+n[0];
+    if (m !== n && freq[m] && !mirrors.some(p => p.includes(n))) mirrors.push([n, m]);
+  });
+
+  // sum groups
+  const sumG = {};
+  allRounds.forEach(e => {
+    if (e.top !== '??') { const s = +e.top[0] + +e.top[1]; sumG[s] = (sumG[s]||0)+1; }
+  });
+  const topSum = Object.entries(sumG).sort((a,b) => b[1]-a[1])[0];
+
+  // cold numbers
+  const cold = [];
+  for (let i = 0; i < 100; i++) { const n = pad(i); if (!freq[n]) cold.push(n); }
+
+  const pats = [
+    { icon:'🔥', title:'เลขร้อน (ออกบ่อย)',  nums: top3, cls:'a' },
+    { icon:'🔗', title:'คู่ที่ออกต่อกัน',      nums: topPair ? topPair[0].split('-') : [], cls:'b' },
+    { icon:'🔢', title:'หลักนำ+หน่วยเด่น',    nums: [ld+'?', '?'+ud, ''+ld+ud], cls:'c' },
+    { icon:'🪞', title:'คู่สะท้อน (เช่น 15↔51)', nums: mirrors.slice(0,2).flat().slice(0,4), cls:'d' },
+    { icon:'➕', title:`ผลบวก ${topSum?topSum[0]+' ('+topSum[1]+'ครั้ง)':''}`, nums: topSum ? allRounds.filter(e => e.top!=='??' && +e.top[0]+ +e.top[1]===+topSum[0]).slice(0,4).map(e=>e.top) : [], cls:'e' },
+    { icon:'🧊', title:'เลขเย็น (ยังไม่ออก)', nums: cold.slice(0, 4), cls:'' },
+  ];
+
+  pg.innerHTML = pats.map(p => `
+    <div class="pat">
+      <div class="pat-icon">${p.icon}</div>
+      <div class="pat-title">${p.title}</div>
+      <div class="pat-nums">
+        ${p.nums.length
+          ? p.nums.map(n => `<span class="pn ${p.cls}">${n}</span>`).join('')
+          : '<span style="font-size:11px;color:var(--muted)">—</span>'}
+      </div>
+    </div>`).join('');
+}
+
+/* ── STAT KPIs ── */
+function renderStatKPIs() {
+  if (!allRounds.length) return;
+  document.getElementById('kpiRow').style.display = 'grid';
+  const nums  = allRounds.filter(e => e.top !== '??').map(e => +e.top);
+  const avg   = (nums.reduce((a,b) => a+b, 0) / nums.length).toFixed(1);
+  const s2    = [...nums].sort((a,b) => a-b);
+  const med   = s2[Math.floor(s2.length/2)];
+  const uniq  = Object.keys(freq).length;
+  const dbl   = Object.values(freq).filter(a => a.length >= 2).length;
+  const hot   = Object.values(freq).filter(a => a.length >= 4).length;
+  const mn    = Math.min(...nums), mx = Math.max(...nums);
+  document.getElementById('kAvg').textContent   = avg;
+  document.getElementById('kMed').textContent   = pad(med);
+  document.getElementById('kUniq').textContent  = uniq;
+  document.getElementById('kDbl').textContent   = dbl;
+  document.getElementById('kHot').textContent   = hot;
+  document.getElementById('kRange').textContent = pad(mn)+'–'+pad(mx);
+}
+
+/* ── LOCAL PREDICTION ── */
+function calcLocalPred() {
+  if (allRounds.length < 3) return;
+
+  const conf = Math.min(20 + allRounds.length * 2.5, 78);
+  setRing(conf, 'สถิติพื้นฐาน', `จาก ${allRounds.length} งวด — กด "AI วิเคราะห์" เพื่อความแม่นยำสูงขึ้น`);
+
+  const rec  = allRounds.slice(0,5).filter(e=>e.top!=='??').map(e=>+e.top);
+  const p1   = pad(Math.round(rec.reduce((a,b)=>a+b,0)/rec.length) % 100);
+  const topF = Object.entries(freq).sort((a,b)=>b[1].length-a[1].length)[0];
+  const p2   = topF ? pad((+topF[0]+11)%100) : '??';
+  const d0   = Array(10).fill(0), d1 = Array(10).fill(0);
+  allRounds.slice(0,10).forEach(e => { if(e.top!=='??'){d0[+e.top[0]]++;d1[+e.top[1]]++;} });
+  const p3   = ''+d0.indexOf(Math.max(...d0))+d1.indexOf(Math.max(...d1));
+  const dblC = Object.entries(freq).filter(([,a])=>a.length>=2).sort((a,b)=>b[1].length-a[1].length);
+  const p4   = dblC[0] ? dblC[0][0] : '??';
+
+  document.getElementById('predSection').style.display  = 'block';
+  document.getElementById('methodSection').style.display = 'block';
+
+  document.getElementById('predNums').innerHTML =
+    `<div class="pred-n pn-gold" style="animation-delay:0s">${p1}<span class="pred-n-lbl">ค่าเฉลี่ย</span></div>
+     <div class="pred-n pn-ember" style="animation-delay:.08s">${p4}<span class="pred-n-lbl">เบิ้ลซ้ำ</span></div>
+     <div class="pred-n pn-ice" style="animation-delay:.16s">${p3}<span class="pred-n-lbl">นำ+หน่วย</span></div>
+     <div class="pred-n pn-gold" style="animation-delay:.24s">${p2}<span class="pred-n-lbl">ร้อน+11</span></div>`;
+
+  const methods = [
+    { icon:'📊', name:'ค่าเฉลี่ย 5 งวด',    score:72, col:'var(--amber)' },
+    { icon:'⚡', name:'เลขเบิ้ลซ้ำ',         score:80, col:'var(--green)' },
+    { icon:'🔢', name:'หลักนำ+หน่วยเด่น',   score:62, col:'var(--ice)' },
+    { icon:'🔥', name:'เลขร้อน+offset',      score:65, col:'var(--ember)' },
+    { icon:'🪞', name:'คู่สะท้อน',           score:55, col:'var(--violet)' },
+  ];
+  document.getElementById('methodList').innerHTML = methods.map(m =>
+    `<div class="method-row">
+       <div class="m-icon">${m.icon}</div>
+       <div class="m-name">${m.name}</div>
+       <div class="m-bar"><div class="m-fill" style="width:${m.score}%;background:${m.col}"></div></div>
+       <div class="m-score" style="color:${m.col}">${m.score}</div>
+     </div>`).join('');
+}
+
+/* ── HISTORY ── */
+function renderHistory(isNew) {
+  const tb = document.getElementById('histBody');
+  document.getElementById('histBadge').textContent = histRows.length + ' งวด';
+  if (!histRows.length) {
+    tb.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--muted)">ยังไม่มีข้อมูล</td></tr>';
+    return;
+  }
+  tb.innerHTML = histRows.slice(0, 40).map((r, i) => {
+    const tF   = (freq[r.top]||[]).length;
+    const bF   = (freq[r.bot]||[]).length;
+    const isDbl= tF >= 2 || bF >= 2;
+    return `<tr${i===0&&isNew?' class="flash"':''}>
+      <td>${r.flag||''} <span style="font-size:12px;color:var(--muted)">${r.name}</span></td>
+      <td style="font-size:10px;color:var(--muted)">${r.round}</td>
+      <td><span class="nb ${tF>=2?'nb-dbl':'nb-top'}">${r.top}</span></td>
+      <td><span class="nb ${bF>=2?'nb-dbl':'nb-bot'}">${r.bot}</span></td>
+      <td style="font-size:11px;color:${isDbl?'var(--amber)':'var(--muted)'}">${isDbl?'⚡ เบิ้ล!':'—'}</td>
+      <td style="font-family:'Share Tech Mono';font-size:11px;color:${tF>=4?'var(--ember)':tF>=2?'var(--amber)':'var(--muted)'}">${tF}×</td>
+      <td style="font-family:'Share Tech Mono';font-size:11px;color:${bF>=4?'var(--ember)':bF>=2?'var(--amber)':'var(--muted)'}">${bF}×</td>
+      <td style="font-family:'Share Tech Mono';font-size:10px;color:var(--ghost)">${r.time.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ════════════════════════════════════════════════════
+   AI DEEP ANALYSIS — Claude API
+════════════════════════════════════════════════════ */
+async function runDeepAI() {
+  if (allRounds.length < 2) {
+    alert2('⚠️ ต้องการข้อมูลอย่างน้อย 2 งวด — กรอกเลขหรือโหลด Demo', 'al-info');
+    return;
+  }
+
+  const aiEl = document.getElementById('aiStream');
+  aiEl.className = 'ai-stream pending';
+  aiEl.innerHTML = 'กำลังวิเคราะห์ด้วย Claude AI...<span class="cursor"></span>';
+  setRing(null, 'AI กำลังประมวลผล...', '');
+
+  const doubles  = Object.entries(freq).filter(([,a]) => a.length >= 2).sort((a,b) => b[1].length - a[1].length);
+  const topNums  = Object.entries(freq).sort((a,b) => b[1].length - a[1].length).slice(0,8)
+                     .map(([n,a]) => `${n}(${a.length}×)`).join(', ');
+  const recentSeq= allRounds.slice(0,12).map(e => `${e.top}/${e.bot}`).join(', ');
+  const dblList  = doubles.map(([n,a]) => `${n}×${a.length}`).join(', ') || 'ยังไม่พบ';
+  const sources  = [...new Set(allRounds.map(e => e.flag+e.name))].join(', ');
+
+  const prompt = `คุณคือผู้เชี่ยวชาญวิเคราะห์หวยหุ้นมืออาชีพ วิเคราะห์ข้อมูลต่อไปนี้อย่างละเอียด:
+
+📊 ข้อมูลรวม: ${allRounds.length} งวด จาก ${sources}
+🔢 ลำดับ บน/ล่าง ล่าสุด: ${recentSeq}
+🔥 ความถี่เลขสูงสุด: ${topNums}
+⚡ เลขเบิ้ล (ออกซ้ำ): ${dblList}
+
+วิเคราะห์เชิงลึก 5 ข้อ:
+1. รูปแบบ (pattern) ที่ชัดเจนในลำดับเลขที่ให้มา
+2. เลขเบิ้ลที่มีโอกาสออกซ้ำในงวดถัดไป พร้อมเหตุผล
+3. เลขเย็น (ไม่ออกนาน) ที่น่าจับตา
+4. คาดการณ์เลขบน-ล่าง งวดถัดไป พร้อมเหตุผลสนับสนุน
+5. สรุปเลขเด่น 3 อันดับแรกที่แนะนำ
+
+ตอบภาษาไทย กระชับ ชัดเจน แบ่งเป็นข้อ ใช้ emoji ประกอบ
+จบด้วย JSON 1 บรรทัด: {"pred":["XX","XX","XX"],"double":["XX","XX"],"conf":75}`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role:'user', content: prompt }]
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || 'API Error ' + res.status);
+    }
+
+    const data = await res.json();
+    const txt  = data.content?.[0]?.text || 'ไม่สามารถวิเคราะห์ได้';
+
+    // Parse embedded JSON
+    let aiTxt = txt, pred = [], dbl = [], conf = 72;
+    const jm  = txt.match(/\{"pred"[\s\S]*?\}/);
+    if (jm) {
+      try {
+        const j = JSON.parse(jm[0]);
+        pred  = j.pred   || [];
+        dbl   = j.double || [];
+        conf  = j.conf   || 72;
+        aiTxt = txt.replace(jm[0], '').trim();
+      } catch (_) {}
+    }
+
+    aiEl.className = 'ai-stream';
+    aiEl.innerHTML = aiTxt.replace(/\n/g, '<br>');
+    setRing(conf, 'AI วิเคราะห์เสร็จ', `จาก ${allRounds.length} งวด · ${doubles.length} เลขเบิ้ล`);
+
+    // Render AI prediction numbers
+    if (pred.length || dbl.length) {
+      document.getElementById('predSection').style.display = 'block';
+      document.getElementById('predNums').innerHTML =
+        pred.map((n,i) =>
+          `<div class="pred-n pn-gold" style="animation-delay:${i*.08}s">${pad(+n)}<span class="pred-n-lbl">AI แนะนำ</span></div>`).join('') +
+        dbl.map((n,i) =>
+          `<div class="pred-n pn-ember" style="animation-delay:${(pred.length+i)*.08}s">${pad(+n)}<span class="pred-n-lbl">AI เบิ้ล</span></div>`).join('');
+    }
+
+    updateChips();
+    alert2(`✅ AI วิเคราะห์เสร็จ — ความมั่นใจ ${conf}%`, 'al-ok');
+
+  } catch (e) {
+    aiEl.className  = 'ai-stream';
+    aiEl.innerHTML  = `❌ เชื่อมต่อ Claude API ไม่ได้<br><span style="font-size:11px;color:var(--muted)">${e.message}</span>`;
+    setRing(0, 'เชื่อมต่อล้มเหลว', e.message);
+    alert2('❌ Claude API: ' + e.message, 'al-err');
+  }
+}
+
+/* ════════════════════════════════════════════════════
+   HELPERS
+════════════════════════════════════════════════════ */
+function pad(n)   { return String(n).padStart(2, '0'); }
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+function setStatus(icon, txt) {
+  document.getElementById('sIcon').textContent = icon;
+  document.getElementById('sTxt').textContent  = txt;
+}
+
+function setBusy(b) {
+  const btn = document.getElementById('btnFetch');
+  btn.disabled    = b;
+  btn.textContent = b ? '⏳ กำลังดึง...' : '⚡ ดึงเว็บ';
+}
+
+let alertTmr;
+function alert2(msg, cls) {
+  document.getElementById('alertBox').innerHTML = `<div class="alert ${cls}">${msg}</div>`;
+  clearTimeout(alertTmr);
+  alertTmr = setTimeout(() => document.getElementById('alertBox').innerHTML = '', 5500);
+}
+function clearAlert() { document.getElementById('alertBox').innerHTML = ''; }
+
+function updateChips() {
+  const ok   = Object.values(fetched).filter(Boolean).length;
+  const dbl  = Object.values(freq).filter(a => a.length >= 2).length;
+  const hot  = Object.values(freq).filter(a => a.length >= 4).length;
+  const fire = Object.values(freq).filter(a => a.length >= 5).length;
+  document.getElementById('cAll').textContent  = allRounds.length;
+  document.getElementById('cDbl').textContent  = dbl;
+  document.getElementById('cHot').textContent  = hot;
+  document.getElementById('cFire').textContent = fire;
+  document.getElementById('cTime').textContent = allRounds.length ? new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}) : '—';
+}
+
+function setRing(pct, status, desc) {
+  if (pct !== null) {
+    const C = 238.8, off = C * (1 - pct/100);
+    document.getElementById('confArc').style.strokeDashoffset = off;
+    document.getElementById('confPct').textContent = Math.round(pct) + '%';
+  }
+  if (status) document.getElementById('confStatus').textContent = status;
+  if (desc)   document.getElementById('confDesc').textContent   = desc;
+}
+
+function updateTicker(src, top, bot) {
+  const map = { thai:'t2', nikkei:'t5', hangseng:'t6', hanoi:'t7', laos:'t8', dowjones:'t3' };
+  const id  = map[src];
+  if (id) document.getElementById(id).textContent = `${top}/${bot}`;
+}
+
+function refreshDoubles() { renderDoubles(); updateHeatmap(); }
+</script>
+</body>
+</html>

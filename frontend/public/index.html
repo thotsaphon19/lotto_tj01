@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LOTTO-Analyz · วิเคราะห์หวยหุ้นตลาดทั่วโลก · Real-time AI Powered</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Dots&family=Noto+Sans+Thai:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div class="page">
+
+  <!-- ── TOPBAR ── -->
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-gem">🎯</div>
+      <div>
+        <div class="brand-name">LOTTO-Analyze</div>
+        <div class="brand-tagline">Markets · Regions · Real-time · AI Powered</div>
+        <div class="brand-tagline">TECH-TJ Solution Technology</div>
+      </div>
+    </div>
+    <div class="topbar-r">
+      <!-- วันที่ระบบ -->
+      <div class="sys-date-chip">
+        🗓️ <span id="systemDate">--/--/----</span>
+      </div>
+      <div class="pill"><div class="dot-live"></div>LIVE</div>
+      <div class="api-status" id="apiStatus" title="Backend API Status">
+        <span class="api-dot"></span>API
+      </div>
+      <div class="clk" id="clk">--:--:--</div>
+    </div>
+  </div>
+
+  <!-- ── TICKER ── -->
+  <div class="ticker">
+    <div class="ticker-tag">MARKET FEED</div>
+    <div class="ticker-body">
+      <div class="ticker-scroll" id="tickerScroll">
+        <span class="tk"><b>กำลังโหลด...</b></span>
+        <span class="tk"><b>กำลังโหลด...</b></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CONTROL BAR ── -->
+  <div class="ctrl-bar">
+    <!-- Fetch controls -->
+    <div class="ctrl-group" style="flex:1;min-width:280px">
+      <div class="flbl">เลือกตลาด (เลื่อนซ้าย-ขวาเพื่อดูทั้งหมด)</div>
+      <div class="market-tabs" id="marketTabs">
+        <!-- injected by JS -->
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <div class="flbl">กรอกเลขเอง</div>
+      <div class="manual-row">
+        <input class="inp inp-num" id="manTop" type="text" maxlength="2" placeholder="บน"
+          oninput="this.value=this.value.replace(/[^0-9]/g,'')"
+          onkeydown="if(event.key==='Enter')addManual()">
+        <span style="color:var(--muted);font-size:18px">/</span>
+        <input class="inp inp-num" id="manBot" type="text" maxlength="2" placeholder="ล่าง"
+          oninput="this.value=this.value.replace(/[^0-9]/g,'')"
+          onkeydown="if(event.key==='Enter')addManual()">
+        <button class="btn btn-primary btn-sm" onclick="addManual()">➕</button>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <div class="flbl">ดึงข้อมูลเว็บ (Custom URL)</div>
+      <div class="manual-row">
+        <input class="inp" id="customUrl" type="url" placeholder="https://example.com/lottery"
+          style="font-size:11px;font-family:'Share Tech Mono';flex:1;min-width:200px">
+        <input class="inp" id="customName" type="text" placeholder="ชื่อตลาด" style="width:90px">
+        <button class="btn btn-ghost btn-sm" onclick="fetchCustomUrl()">⚡</button>
+      </div>
+    </div>
+
+    <div class="ctrl-group" style="justify-content:flex-end;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary" id="btnFetch" onclick="fetchSelected()">⚡ ดึงข้อมูล</button>
+      <button class="btn btn-ghost" onclick="fetchAll()">🔄 ทุกตลาด</button>
+      <button class="btn btn-ghost btn-sm" onclick="loadDemo()">📦 Demo</button>
+      <button class="btn btn-violet" onclick="runAI()">🤖 AI วิเคราะห์</button>
+      <button class="btn btn-danger btn-sm" onclick="clearAll()">🗑</button>
+    </div>
+  </div>
+
+  <!-- alerts -->
+  <div id="alertBox"></div>
+
+  <!-- ── STATUS + CHIPS ── -->
+  <div class="statusbar">
+    <span id="sIcon">📡</span>
+    <span id="sTxt">พร้อมใช้งาน — เลือกตลาดและกดดึงข้อมูล</span>
+    <div class="auto-refresh">
+      <label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="autoRefresh" onchange="toggleAutoRefresh()">
+        Auto refresh
+        <select id="refreshInterval" class="inp" style="padding:2px 6px;font-size:11px;width:auto">
+          <option value="60">1 นาที</option>
+          <option value="300">5 นาที</option>
+          <option value="600">10 นาที</option>
+        </select>
+      </label>
+    </div>
+  </div>
+
+  <div class="chips">
+    <div class="chip"><div class="cdot" style="background:var(--green)"></div>งวดทั้งหมด <strong id="cAll">0</strong></div>
+    <div class="chip"><div class="cdot" style="background:var(--amber)"></div>เลขเบิ้ล <strong id="cDbl">0</strong></div>
+    <div class="chip"><div class="cdot" style="background:var(--ember)"></div>เลขร้อน <strong id="cHot">0</strong></div>
+    <div class="chip"><div class="cdot" style="background:var(--red)"></div>เลขไฟ <strong id="cFire">0</strong></div>
+    <div class="chip"><div class="cdot" style="background:var(--ice)"></div>ตลาด <strong id="cMkt">0</strong></div>
+    <div class="chip"><div class="cdot" style="background:var(--green)"></div>ภูมิภาค <strong id="cRegion">8</strong></div>
+    <div class="chip chip-acc"><div class="cdot" style="background:var(--violet)"></div>ความแม่นยำ <strong id="cAccuracy">—</strong></div>
+    <div class="chip"><div class="cdot" style="background:var(--violet)"></div>อัพเดท <strong id="cTime">—</strong></div>
+  </div>
+
+  <!-- ── ACCURACY PANEL ── -->
+  <div class="acc-panel">
+    <div class="acc-panel-title">
+      📈 ความแม่นยำการพยากรณ์ (Prediction Accuracy) ± 5%
+    </div>
+    <div id="accuracyPanel"><div class="acc-empty">เพิ่มข้อมูลหรือโหลด Demo เพื่อดูความแม่นยำ</div></div>
+  </div>
+
+  <!-- ── MARKET CARDS ── -->
+  <div class="sec">🌐 ผลแต่ละตลาด <span class="badge" id="rcBadge">0 ตลาด</span></div>
+  <div class="res-grid" id="resGrid"></div>
+
+  <!-- ── STAT KPIs ── -->
+  <div class="kpi-row" id="kpiRow" style="display:none">
+    <div class="kpi"><div class="kpi-val" style="color:var(--amber)" id="kAvg">--</div><div class="kpi-lbl">ค่าเฉลี่ย</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:var(--ice)"   id="kMed">--</div><div class="kpi-lbl">มัธยฐาน</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:var(--green)" id="kUniq">--</div><div class="kpi-lbl">ไม่ซ้ำ</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:var(--amber)" id="kDbl">--</div><div class="kpi-lbl">เบิ้ล (2+)</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:var(--ember)" id="kHot">--</div><div class="kpi-lbl">ร้อน (4+)</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:var(--violet)" id="kRange">--</div><div class="kpi-lbl">ช่วง</div></div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       DOUBLE DETECTION PANEL
+  ═══════════════════════════════════════════════ -->
+  <div class="panel dbl-panel">
+    <div class="panel-head">
+      <div class="ph-icon amber">⚡</div>
+      <div>
+        <div class="ph-title amber">ตรวจจับเลขเบิ้ล</div>
+        <div class="ph-sub">Double Detection · Heat Map · Pattern Analysis</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="refreshDoubles()">↻ รีเฟรช</button>
+    </div>
+    <div class="panel-body">
+
+      <div class="sec" style="margin-bottom:8px">🌡️ แผนที่ความร้อน 00–99</div>
+      <div class="heatmap" id="heatmap"></div>
+      <div class="legend">
+        <div class="lg"><div class="lg-dot" style="background:var(--raised);border:1px solid var(--dim)"></div>ไม่ออก</div>
+        <div class="lg"><div class="lg-dot" style="background:rgba(0,196,255,.2)"></div>1×</div>
+        <div class="lg"><div class="lg-dot" style="background:rgba(139,92,246,.22)"></div>2×</div>
+        <div class="lg"><div class="lg-dot" style="background:rgba(245,180,0,.22)"></div>3×</div>
+        <div class="lg"><div class="lg-dot" style="background:rgba(255,104,0,.3)"></div>4+ (เบิ้ล)</div>
+        <div class="lg"><div class="lg-dot" style="background:rgba(255,31,64,.32)"></div>5+ (ร้อน)</div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="sec" style="margin-bottom:10px">🔬 วิเคราะห์รูปแบบ</div>
+      <div class="pat-grid" id="patGrid">
+        <div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--muted);font-size:12px">ต้องการข้อมูลก่อน</div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="sec" style="margin-bottom:10px">📊 รายการเลขเบิ้ล <span class="badge" id="dblBadge">0 ตัว</span></div>
+      <div id="dblList">
+        <div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">ยังไม่พบเลขซ้ำ</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       PREDICTION PANEL
+  ═══════════════════════════════════════════════ -->
+  <div class="panel pred-panel">
+    <div class="panel-head">
+      <div class="ph-icon violet">🔮</div>
+      <div>
+        <div class="ph-title violet">พยากรณ์งวดถัดไป</div>
+        <div class="ph-sub">Next Round Prediction · Statistical + Claude AI · ±5%</div>
+      </div>
+      <button class="btn btn-violet btn-sm" style="margin-left:auto" onclick="runAI()">🤖 AI วิเคราะห์</button>
+    </div>
+    <div class="panel-body">
+
+      <div class="conf-wrap">
+        <svg class="ring-svg" width="92" height="92" viewBox="0 0 92 92">
+          <circle cx="46" cy="46" r="38" fill="none" stroke="var(--dim)" stroke-width="7"/>
+          <circle id="confArc" cx="46" cy="46" r="38" fill="none"
+            stroke="url(#cgrd)" stroke-width="7" stroke-linecap="round"
+            stroke-dasharray="238.8" stroke-dashoffset="238.8"
+            style="transition:stroke-dashoffset .9s ease"/>
+          <defs>
+            <linearGradient id="cgrd" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#8b5cf6"/>
+              <stop offset="100%" stop-color="#00c4ff"/>
+            </linearGradient>
+          </defs>
+          <text id="confPct" x="46" y="44" text-anchor="middle" dominant-baseline="middle"
+            font-family="Zen Dots" font-size="16" fill="#00c4ff"
+            style="transform:rotate(90deg);transform-origin:46px 46px">--%</text>
+          <text x="46" y="60" text-anchor="middle" dominant-baseline="middle"
+            font-family="Noto Sans Thai" font-size="8" fill="#566a94"
+            style="transform:rotate(90deg);transform-origin:46px 46px">±5%</text>
+        </svg>
+        <div class="conf-info">
+          <div class="conf-label">สถานะการวิเคราะห์</div>
+          <div class="conf-val"  id="confStatus">รอข้อมูล</div>
+          <div class="conf-desc" id="confDesc">เพิ่มข้อมูลก่อน หรือกด "🤖 AI วิเคราะห์"</div>
+        </div>
+      </div>
+
+      <div id="predSection" style="display:none">
+        <div class="pred-lbl">🎯 เลขเด่นงวดถัดไป</div>
+        <div class="pred-nums" id="predNums"></div>
+      </div>
+
+      <div id="methodSection" style="display:none">
+        <div class="pred-lbl" style="margin-top:14px">📐 วิธีวิเคราะห์ + ความแม่นยำ</div>
+        <div class="method-list" id="methodList"></div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px">
+        <span style="font-size:15px">🤖</span>
+        <span style="font-family:'Zen Dots';font-size:10px;letter-spacing:2px;color:var(--violet)">CLAUDE AI DEEP ANALYSIS</span>
+        <div class="ai-loading" id="aiLoading" style="display:none">
+          <div class="spin"></div>
+        </div>
+      </div>
+      <div class="ai-stream pending" id="aiStream">
+กดปุ่ม "🤖 AI วิเคราะห์" เพื่อให้ Claude วิเคราะห์รูปแบบเชิงลึก
+พยากรณ์เลขเด่น + เลขเบิ้ล งวดถัดไป พร้อมเหตุผล (ความแม่นยำ ±5%)</div>
+
+    </div>
+  </div>
+
+  <!-- ── HISTORY TABLE ── -->
+  <div class="panel hist-wrap">
+    <div style="padding:14px 20px 11px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <div class="sec" style="margin:0">📋 ประวัติทุกงวด <span class="badge" id="histBadge">0</span></div>
+      <button class="btn btn-ghost btn-sm" onclick="exportCSV()">📥 Export CSV</button>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="htbl">
+        <thead>
+          <tr>
+            <th>ตลาด</th>
+            <th>รอบ</th>
+            <th>เลขบน</th>
+            <th>เลขล่าง</th>
+            <th>เบิ้ล?</th>
+            <th>บน×</th>
+            <th>ล่าง×</th>
+            <th>📅 วันที่ผล</th>
+            <th>ดัชนี</th>
+            <th>เวลา</th>
+          </tr>
+        </thead>
+        <tbody id="histBody">
+          <tr><td colspan="10" style="text-align:center;padding:24px;color:var(--muted)">ยังไม่มีข้อมูล</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+    <center><div class="ph-title amber">© 2026 TECH-TJ</div>
+
+     <div class="brand-tagline">Software Solutions Technology</div>
+
+</div><!-- /page -->
+
+<script src="js/app.js"></script>
+</body>
+</html>
