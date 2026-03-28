@@ -27,6 +27,16 @@ let accuracyData  = null; // latest accuracy calculation
 ══════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', async () => {
   startClock();
+
+  /* ── Auth: ต้อง login ก่อนใช้งาน ── */
+  const authed = await authInit();
+  if (!authed) {
+    /* authInit จะแสดง login overlay; หลัง login สำเร็จ onLoginSuccess()
+       จะ reload หน้าเพื่อให้ app เริ่มต้นใหม่อย่างสะอาด              */
+    return;
+  }
+
+  /* ── เริ่มต้น App ปกติ ── */
   initHeatmap();
   await checkBackend();
   await loadMarkets();

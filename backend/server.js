@@ -48,9 +48,99 @@ const axios       = require('axios');
 const cheerio     = require('cheerio');
 const NodeCache   = require('node-cache');
 const path        = require('path');
+const crypto      = require('crypto');
 
 const app   = express();
 const cache = new NodeCache({ stdTTL: parseInt(process.env.CACHE_TTL) || 300 });
+
+/* ════════════════════════════════════════════════════
+   AUTH SYSTEM
+   ─ ผู้ใช้และรหัสผ่านตั้งค่าใน .env หรือ USER_ACCOUNTS
+   ─ สถานะล็อก (systemLocked) เก็บใน memory (รีเซ็ตเมื่อ restart)
+   ─ Token: random hex 32 bytes, หมดอายุ 24 ชั่วโมง
+════════════════════════════════════════════════════ */
+
+/* -- Accounts — อ่านจาก .env ทั้งหมด -- */
+const AUTH_ACCOUNTS = [
+  /* Admin */
+  {
+    username: process.env.ADMIN_USERNAME || 'admin',
+    password: process.env.ADMIN_PASSWORD || 'Admin@1234',
+    role: 'admin',
+  },
+  /* Users — เพิ่ม entry ใหม่ตาม USER2_, USER3_ … ได้เลย */
+  process.env.USER1_USERNAME && {
+    username: process.env.USER1_USERNAME,
+    password: process.env.USER1_PASSWORD || '',
+    role: 'user',
+  },
+  process.env.USER2_USERNAME && {
+    username: process.env.USER2_USERNAME,
+    password: process.env.USER2_PASSWORD || '',
+    role: 'user',
+  },
+  process.env.STAFF_USERNAME && {
+    username: process.env.STAFF_USERNAME,
+    password: process.env.STAFF_PASSWORD || '',
+    role: 'user',
+  },
+].filter(Boolean); /* กรอง entry ที่ไม่ได้ตั้งค่าออก */
+
+/* -- Active tokens: Map<token, {username, role, expiresAt}> -- */
+const activeTokens = new Map();
+const TOKEN_TTL_MS = parseInt(process.env.TOKEN_TTL_MS) || 24 * 60 * 60 * 1000;
+
+/* -- System lock state (อ่านค่าเริ่มต้นจาก .env) -- */
+let systemLocked     = process.env.SYSTEM_LOCKED_ON_START === 'true';
+let systemLockReason = process.env.SYSTEM_LOCK_DEFAULT_REASON || 'ระบบปิดปรับปรุงชั่วคราว';
+let systemLockedAt   = systemLocked ? new Date().toISOString() : null;
+
+/* Helper: สร้าง token */
+function generateToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+/* Helper: ตรวจ token */
+function verifyToken(token) {
+  if (!token) return null;
+  const t = activeTokens.get(token);
+  if (!t) return null;
+  if (Date.now() > t.expiresAt) { activeTokens.delete(token); return null; }
+  return t;
+}
+
+/* Helper: ดึง Bearer token จาก header */
+function extractBearer(req) {
+  const auth = req.headers['authorization'] || '';
+  return auth.startsWith('Bearer ') ? auth.slice(7) : null;
+}
+
+/* Middleware: ต้อง login */
+function requireAuth(req, res, next) {
+  const token = extractBearer(req);
+  const user  = verifyToken(token);
+  if (!user) return res.status(401).json({ success: false, message: 'กรุณาเข้าสู่ระบบ' });
+  req.authUser = user;
+  next();
+}
+
+/* Middleware: ต้องเป็น admin */
+function requireAdmin(req, res, next) {
+  requireAuth(req, res, () => {
+    if (req.authUser.role !== 'admin')
+      return res.status(403).json({ success: false, message: 'ต้องการสิทธิ์ Admin' });
+    next();
+  });
+}
+
+/* Rate limit สำหรับ login — อ่านจาก .env */
+const loginLimiter = rateLimit({
+  windowMs: parseInt(process.env.LOGIN_RATE_WINDOW_MS) || 15 * 60 * 1000,
+  max:      parseInt(process.env.LOGIN_RATE_MAX)        || 10,
+  message:  { success: false, message: 'พยายาม login มากเกินไป กรุณารอสักครู่แล้วลองใหม่' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+});
 
 /* ════════════════════════════════════════════════════
    MARKET TYPE — แยกประเภทชัดเจน
@@ -1611,6 +1701,127 @@ app.post('/api/accuracy', (req, res) => {
   if (!freq) return res.status(400).json({ success: false, error: 'freq required' });
   const accuracy = computeAccuracy(freq, allNums, rounds || 0);
   res.json({ success: true, accuracy });
+});
+
+/* ════════════════════════════════════════════════════
+   AUTH ROUTES
+════════════════════════════════════════════════════ */
+
+/**
+ * GET /api/auth/status
+ * ตรวจสอบสถานะระบบ (ล็อกหรือไม่) — ไม่ต้อง auth
+ */
+app.get('/api/auth/status', (_req, res) => {
+  res.json({
+    locked:   systemLocked,
+    reason:   systemLockReason || 'ผู้ดูแลระบบปิดการใช้งานชั่วคราว',
+    lockedAt: systemLockedAt,
+  });
+});
+
+/**
+ * POST /api/auth/login
+ * Body: { username, password }
+ * Response: { success, token, username, role }
+ */
+app.post('/api/auth/login', loginLimiter, (req, res) => {
+  /* ถ้าระบบถูกล็อก ไม่อนุญาต login (ยกเว้น admin) */
+  const { username, password } = req.body || {};
+  if (!username || !password)
+    return res.status(400).json({ success: false, message: 'กรุณากรอกชื่อผู้ใช้และรหัสผ่าน' });
+
+  const account = AUTH_ACCOUNTS.find(a => a.username === username && a.password === password);
+  if (!account)
+    return res.status(401).json({ success: false, message: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' });
+
+  /* ถ้าระบบล็อก อนุญาตเฉพาะ admin */
+  if (systemLocked && account.role !== 'admin')
+    return res.status(403).json({ success: false, message: 'ระบบถูกล็อกชั่วคราว กรุณาติดต่อผู้ดูแล' });
+
+  const token = generateToken();
+  activeTokens.set(token, {
+    username: account.username,
+    role:     account.role,
+    expiresAt: Date.now() + TOKEN_TTL_MS,
+  });
+
+  console.log(`[Auth] Login: ${account.username} (${account.role}) at ${new Date().toISOString()}`);
+  res.json({ success: true, token, username: account.username, role: account.role });
+});
+
+/**
+ * POST /api/auth/verify
+ * Header: Authorization: Bearer <token>
+ * Response: { valid, username, role }
+ */
+app.post('/api/auth/verify', (req, res) => {
+  const token = extractBearer(req);
+  const user  = verifyToken(token);
+  if (!user) return res.json({ valid: false });
+  res.json({ valid: true, username: user.username, role: user.role });
+});
+
+/**
+ * POST /api/auth/logout
+ * Header: Authorization: Bearer <token>
+ */
+app.post('/api/auth/logout', requireAuth, (req, res) => {
+  const token = extractBearer(req);
+  activeTokens.delete(token);
+  res.json({ success: true });
+});
+
+/* ════════════════════════════════════════════════════
+   ADMIN ROUTES
+════════════════════════════════════════════════════ */
+
+/**
+ * POST /api/admin/lock
+ * Header: Authorization: Bearer <admin-token>
+ * Body: { reason? }
+ * ล็อกระบบ — ผู้ใช้ทั่วไปทุกคนจะถูก kick ออกใน 30 วิ (client poller)
+ */
+app.post('/api/admin/lock', requireAdmin, (req, res) => {
+  const { reason } = req.body || {};
+  systemLocked     = true;
+  systemLockReason = reason || 'ผู้ดูแลระบบปิดการใช้งานชั่วคราว';
+  systemLockedAt   = new Date().toISOString();
+
+  /* เพิกถอน token ทั้งหมดที่ไม่ใช่ admin */
+  for (const [token, user] of activeTokens.entries()) {
+    if (user.role !== 'admin') activeTokens.delete(token);
+  }
+
+  console.log(`[Admin] 🔒 System LOCKED by ${req.authUser.username} — "${systemLockReason}"`);
+  res.json({ success: true, locked: true, reason: systemLockReason });
+});
+
+/**
+ * POST /api/admin/unlock
+ * Header: Authorization: Bearer <admin-token>
+ */
+app.post('/api/admin/unlock', requireAdmin, (req, res) => {
+  systemLocked     = false;
+  systemLockReason = '';
+  systemLockedAt   = null;
+  console.log(`[Admin] 🔓 System UNLOCKED by ${req.authUser.username}`);
+  res.json({ success: true, locked: false });
+});
+
+/**
+ * GET /api/admin/sessions
+ * ดู active sessions ทั้งหมด (admin only)
+ */
+app.get('/api/admin/sessions', requireAdmin, (_req, res) => {
+  const sessions = [];
+  for (const [, user] of activeTokens.entries()) {
+    sessions.push({
+      username:  user.username,
+      role:      user.role,
+      expiresAt: new Date(user.expiresAt).toISOString(),
+    });
+  }
+  res.json({ success: true, count: sessions.length, sessions });
 });
 
 /** Catch-all → serve frontend */
